@@ -1,21 +1,43 @@
-const { connectDB } = require('./db');
+require('dotenv').config(); // Load environment variables
+const { MongoClient, ServerApiVersion } = require('mongodb');
 
-async function test() {
+// Always use environment variables for credentials
+const uri = process.env.MONGODB_URI;
+
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+  connectTimeoutMS: 5000,  // 5 seconds connection timeout
+  socketTimeoutMS: 30000,  // 30 seconds socket timeout
+  maxPoolSize: 10          // Connection pool size
+});
+
+async function testConnection() {
   try {
-    const db = await connectDB();
-    console.log('✅ Connection verified');
+    await client.connect();
     
-    // Test CRUD operations
-    const testCollection = db.collection('testCollection');
-    await testCollection.insertOne({ test: new Date() });
-    const docs = await testCollection.find().toArray();
-    console.log('📝 Test documents:', docs);
-    await testCollection.deleteMany({});
+    // Test both admin ping and your actual database
+    await client.db("admin").command({ ping: 1 });
+    console.log("✅ Pinged admin database successfully");
+    
+    // Test your actual database connection
+    const db = client.db("todoDB");
+    await db.command({ ping: 1 });
+    console.log("✅ Connected to todoDB successfully");
+    
+    return true;
   } catch (err) {
-    console.error('❌ Test failed:', err);
+    console.error("❌ Connection failed:", err.message);
+    return false;
   } finally {
-    process.exit();
+    await client.close();
   }
 }
 
-test();
+// Enhanced test with better error handling
+testConnection().then(success => {
+  process.exit(success ? 0 : 1);
+});

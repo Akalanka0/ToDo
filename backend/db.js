@@ -1,40 +1,47 @@
 const { MongoClient } = require('mongodb');
 require('dotenv').config();
 
-let client;
+const client = new MongoClient(process.env.MONGODB_URI, {
+  connectTimeoutMS: 5000,
+  socketTimeoutMS: 30000,
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  serverApi: { 
+    version: '1', 
+    strict: true,
+    deprecationErrors: true 
+  }
+});
+
 let db;
 
-async function connectDB() {
+async function connect() {
   if (db) return db;
   
-  client = new MongoClient(process.env.MONGODB_URI, {
-    connectTimeoutMS: 5000,
-    socketTimeoutMS: 30000,
-    serverApi: { 
-      version: '1', 
-      strict: true,
-      deprecationErrors: true 
-    }
-  });
-
   try {
     await client.connect();
     db = client.db();
+    
+    // Verify connection
     await db.command({ ping: 1 });
-    console.log('✅ MongoDB Connected');
+    console.log('✅ MongoDB connected to:', db.databaseName);
+    
+    // Log collections
+    const collections = await db.listCollections().toArray();
+    console.log('📦 Collections:', collections.map(c => c.name));
+    
     return db;
   } catch (err) {
-    console.error('❌ Connection Error:', err);
+    console.error('❌ MongoDB connection error:', err.message);
     process.exit(1);
   }
 }
 
+// Graceful shutdown
 process.on('SIGINT', async () => {
-  if (client) {
-    await client.close();
-    console.log('MongoDB connection closed');
-  }
+  await client.close();
+  console.log('MongoDB connection closed');
   process.exit(0);
 });
 
-module.exports = { connectDB };
+module.exports = { connect, client };

@@ -1,23 +1,35 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { connectDB } = require('./db');
+const { connect } = require('./db');
 const { ObjectId } = require('mongodb');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+
+// Middleware
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE']
+}));
+app.use(express.json({ limit: '10kb' }));
+
+// Request logging
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
 
 // Routes
 app.get('/api/todos', async (req, res) => {
   try {
-    const db = await connectDB();
+    const db = await connect();
     const todos = await db.collection('todos')
       .find()
       .sort({ createdAt: -1 })
       .toArray();
     res.json(todos);
   } catch (err) {
+    console.error('GET /api/todos error:', err);
     res.status(500).json({ error: 'Failed to fetch todos' });
   }
 });
@@ -28,30 +40,41 @@ app.post('/api/todos', async (req, res) => {
       return res.status(400).json({ error: 'Task is required' });
     }
 
-    const db = await connectDB();
-    const result = await db.collection('todos').insertOne({
+    const db = await connect();
+    const newTodo = {
       task: req.body.task.trim(),
       completed: false,
-      createdAt: new Date()
-    });
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
 
+    const result = await db.collection('todos').insertOne(newTodo);
+    
     res.status(201).json({
       _id: result.insertedId,
-      ...req.body,
-      completed: false,
-      createdAt: new Date()
+      ...newTodo
     });
   } catch (err) {
+    console.error('POST /api/todos error:', err);
     res.status(500).json({ error: 'Failed to create todo' });
   }
 });
 
 app.put('/api/todos/:id', async (req, res) => {
   try {
-    const db = await connectDB();
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+
+    const db = await connect();
+    const updates = {
+      ...req.body,
+      updatedAt: new Date()
+    };
+
     const result = await db.collection('todos').findOneAndUpdate(
       { _id: new ObjectId(req.params.id) },
-      { $set: req.body },
+      { $set: updates },
       { returnDocument: 'after' }
     );
 
@@ -60,13 +83,18 @@ app.put('/api/todos/:id', async (req, res) => {
     }
     res.json(result.value);
   } catch (err) {
+    console.error('PUT /api/todos error:', err);
     res.status(500).json({ error: 'Failed to update todo' });
   }
 });
 
 app.delete('/api/todos/:id', async (req, res) => {
   try {
-    const db = await connectDB();
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+
+    const db = await connect();
     const result = await db.collection('todos').deleteOne({ 
       _id: new ObjectId(req.params.id) 
     });
@@ -76,17 +104,47 @@ app.delete('/api/todos/:id', async (req, res) => {
     }
     res.status(204).end();
   } catch (err) {
+    console.error('DELETE /api/todos error:', err);
     res.status(500).json({ error: 'Failed to delete todo' });
   }
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+// Health check
+app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }));
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok',
+    database: 'connected', // Add this if you want to verify DB status
+    timestamp: new Date().toISOString()
+  });
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// 404 Handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Server error:', err.stack);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// Start server
+async function start() {
+  await connect();
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV}`);
+  });
+}
+
+start().catch(err => {
+  console.error('Fatal startup error:', err);
+  process.exit(1);
 });
