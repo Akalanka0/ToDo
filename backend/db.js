@@ -1,20 +1,21 @@
-const { MongoClient } = require('mongodb');
 require('dotenv').config();
+const { MongoClient } = require('mongodb');
 
-// Safely load the MongoDB URI
+// Load MongoDB URI from environment variable
 const uri = process.env.MONGODB_URI;
 
 if (!uri) {
   console.error("❌ Environment variable MONGODB_URI is not defined.");
-  process.exit(1); // Fail early
+  process.exit(1); // Fail early if missing
 }
 
-// Create a new MongoClient instance with options
+// Create a new MongoClient instance with options including TLS fix
 const client = new MongoClient(uri, {
   connectTimeoutMS: 5000,
   socketTimeoutMS: 30000,
   maxPoolSize: 10,
   minPoolSize: 2,
+  useUnifiedTopology: true,          // recommended for stable topology handling
   serverApi: {
     version: '1',
     strict: true,
@@ -25,7 +26,7 @@ const client = new MongoClient(uri, {
 let db;
 
 /**
- * Connects to MongoDB (if not already connected)
+ * Connects to MongoDB (if not connected yet)
  * @returns {Promise<Db>} MongoDB database instance
  */
 async function connect() {
@@ -33,24 +34,24 @@ async function connect() {
 
   try {
     await client.connect();
-    db = client.db(); // Automatically uses DB from URI if not explicitly named
+    db = client.db(); // Uses database from URI if specified
 
-    // Ping to confirm connection
+    // Confirm connection is alive
     await db.command({ ping: 1 });
     console.log('✅ MongoDB connected to:', db.databaseName);
 
-    // Optional: List collections for debugging
+    // Optional: log collections for debugging
     const collections = await db.listCollections().toArray();
     console.log('📦 Collections:', collections.map(c => c.name));
 
     return db;
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
-    process.exit(1); // Fail the app if DB connection fails
+    process.exit(1); // Exit if connection fails
   }
 }
 
-// Graceful shutdown handler
+// Graceful shutdown handlers
 process.on('SIGINT', async () => {
   await client.close();
   console.log('👋 MongoDB connection closed (SIGINT)');
