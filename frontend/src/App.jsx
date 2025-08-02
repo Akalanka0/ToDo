@@ -8,71 +8,112 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch todos
-  useEffect(() => {
-    setLoading(true);
-    axios.get('/api/todos')
-      .then(res => {
-        setTodos(res.data);
-        setError(null);
-      })
-      .catch(err => {
-        console.error(err);
-        setError('Failed to fetch todos');
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  // API configuration
+  const API_BASE_URL = process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:3001/api/todos' 
+    : '/api/todos';
 
-  // Add todo
-  const addTodo = () => {
-    if (!task.trim()) return;
-    const newTodo = { task, completed: false };
-    setTodos([newTodo, ...todos]); // Optimistic update
-    setTask('');
+  // Fetch todos on component mount
+  useEffect(() => {
+    const fetchTodos = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(API_BASE_URL);
+        setTodos(response.data);
+        setError(null);
+      } catch (err) {
+        console.error('Fetch error:', err);
+        setError('Failed to load todos. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTodos();
+  }, [API_BASE_URL]);
+
+  // Add new todo
+  const addTodo = async () => {
+    if (!task.trim()) {
+      setError('Task cannot be empty');
+      return;
+    }
+
+    const newTodo = { task: task.trim(), completed: false };
     
-    axios.post('/api/todos', { task })
-      .then(res => setTodos([res.data, ...todos.filter(t => t !== newTodo)]))
-      .catch(err => {
-        console.error(err);
-        setTodos(todos.filter(t => t !== newTodo)); // Revert if error
-        setError('Failed to add todo');
-      });
+    try {
+      // Optimistic update
+      setTodos(prev => [newTodo, ...prev]);
+      setTask('');
+      setError(null);
+
+      // API call
+      const response = await axios.post(API_BASE_URL, { task: newTodo.task });
+      
+      // Replace optimistic todo with server response
+      setTodos(prev => [response.data, ...prev.filter(t => t._id !== newTodo._id)]);
+    } catch (err) {
+      console.error('Add error:', err);
+      // Revert optimistic update
+      setTodos(prev => prev.filter(t => t._id !== newTodo._id));
+      setError('Failed to add todo. Please try again.');
+    }
   };
 
-  // Toggle completion
-  const toggleTodo = (id) => {
-    const updatedTodos = todos.map(todo => 
-      todo._id === id ? {...todo, completed: !todo.completed} : todo
-    );
-    setTodos(updatedTodos); // Optimistic update
-    
-    axios.put(`/api/todos/${id}`, { 
-      completed: !todos.find(todo => todo._id === id).completed 
-    })
-      .catch(err => {
-        console.error(err);
-        setTodos(todos); // Revert if error
-        setError('Failed to update todo');
+  // Toggle todo completion
+  const toggleTodo = async (id) => {
+    const todoToUpdate = todos.find(todo => todo._id === id);
+    if (!todoToUpdate) return;
+
+    try {
+      // Optimistic update
+      setTodos(prev => prev.map(todo => 
+        todo._id === id ? {...todo, completed: !todo.completed} : todo
+      ));
+
+      // API call
+      await axios.put(`${API_BASE_URL}/${id}`, { 
+        completed: !todoToUpdate.completed 
       });
+    } catch (err) {
+      console.error('Toggle error:', err);
+      // Revert optimistic update
+      setTodos(prev => prev.map(todo => 
+        todo._id === id ? {...todoToUpdate} : todo
+      ));
+      setError('Failed to update todo. Please try again.');
+    }
   };
 
   // Delete todo
-  const deleteTodo = (id) => {
-    const originalTodos = todos;
-    setTodos(todos.filter(todo => todo._id !== id)); // Optimistic update
-    
-    axios.delete(`/api/todos/${id}`)
-      .catch(err => {
-        console.error(err);
-        setTodos(originalTodos); // Revert if error
-        setError('Failed to delete todo');
-      });
+  const deleteTodo = async (id) => {
+    const todoToDelete = todos.find(todo => todo._id === id);
+    if (!todoToDelete) return;
+
+    try {
+      // Optimistic update
+      setTodos(prev => prev.filter(todo => todo._id !== id));
+
+      // API call
+      await axios.delete(`${API_BASE_URL}/${id}`);
+    } catch (err) {
+      console.error('Delete error:', err);
+      // Revert optimistic update
+      setTodos(prev => [...prev, todoToDelete]);
+      setError('Failed to delete todo. Please try again.');
+    }
   };
 
   return (
     <div className="app">
       <h1>ToDo App</h1>
-      {error && <div className="error">{error}</div>}
+      
+      {error && (
+        <div className="error" onClick={() => setError(null)}>
+          {error} (click to dismiss)
+        </div>
+      )}
+
       <div className="input-container">
         <input
           type="text"
@@ -82,23 +123,40 @@ function App() {
           onKeyPress={(e) => e.key === 'Enter' && addTodo()}
           disabled={loading}
         />
-        <button onClick={addTodo} disabled={loading || !task.trim()}>
-          Add
+        <button 
+          onClick={addTodo} 
+          disabled={loading || !task.trim()}
+        >
+          {loading ? 'Adding...' : 'Add'}
         </button>
       </div>
-      {loading ? (
-        <div>Loading...</div>
+
+      {loading && todos.length === 0 ? (
+        <div className="loading">Loading todos...</div>
       ) : (
         <ul className="todo-list">
           {todos.length === 0 ? (
-            <li>No tasks yet. Add one above!</li>
+            <li className="empty-state">No tasks yet. Add one above!</li>
           ) : (
             todos.map(todo => (
-              <li key={todo._id} className={todo.completed ? 'completed' : ''}>
-                <span onClick={() => toggleTodo(todo._id)}>
+              <li 
+                key={todo._id} 
+                className={`todo-item ${todo.completed ? 'completed' : ''}`}
+              >
+                <span 
+                  className="todo-text"
+                  onClick={() => toggleTodo(todo._id)}
+                >
                   {todo.task}
+                  <span className="todo-date">
+                    {new Date(todo.createdAt).toLocaleDateString()}
+                  </span>
                 </span>
-                <button onClick={() => deleteTodo(todo._id)} disabled={loading}>
+                <button 
+                  className="delete-btn"
+                  onClick={() => deleteTodo(todo._id)}
+                  disabled={loading}
+                >
                   🗑️
                 </button>
               </li>
