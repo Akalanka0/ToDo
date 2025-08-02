@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://your-backend-url.onrender.com/$1"
+      "destination": "https://todo-production-548b.up.railway.app/api/$1"
     }
   ]
 }

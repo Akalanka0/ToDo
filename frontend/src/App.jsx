@@ -1,3 +1,4 @@
+// src/App.jsx
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
@@ -10,11 +11,10 @@ function App() {
   const [addingTodo, setAddingTodo] = useState(false);
   const [error, setError] = useState(null);
 
-  // API configuration
-  const API_BASE_URL =
-    process.env.NODE_ENV === 'development'
-      ? 'http://localhost:3001/api/todos'
-      : '/api/todos';
+  // Use .env defined VITE_API_BASE_URL (for production/backend hosting)
+  const API_BASE_URL = import.meta.env.MODE === 'development'
+    ? 'http://localhost:3001/api/todos'
+    : import.meta.env.VITE_API_BASE_URL;
 
   // Fetch todos on component mount
   useEffect(() => {
@@ -77,20 +77,17 @@ function App() {
     if (!todoToUpdate) return;
 
     try {
-      // Optimistic update
       setTodos((prev) =>
         prev.map((todo) =>
           todo._id === id ? { ...todo, completed: !todo.completed } : todo
         )
       );
 
-      // API call
       await axios.put(`${API_BASE_URL}/${id}`, {
         completed: !todoToUpdate.completed,
       });
     } catch (err) {
       console.error('Toggle error:', err);
-      // Revert optimistic update
       setTodos((prev) =>
         prev.map((todo) => (todo._id === id ? todoToUpdate : todo))
       );
@@ -104,14 +101,10 @@ function App() {
     if (!todoToDelete) return;
 
     try {
-      // Optimistic update
       setTodos((prev) => prev.filter((todo) => todo._id !== id));
-
-      // API call
       await axios.delete(`${API_BASE_URL}/${id}`);
     } catch (err) {
       console.error('Delete error:', err);
-      // Revert optimistic update
       setTodos((prev) => [...prev, todoToDelete]);
       setError('Failed to delete todo. Please try again.');
     }
@@ -133,10 +126,13 @@ function App() {
           value={task}
           onChange={(e) => setTask(e.target.value)}
           placeholder="Enter task..."
-          onKeyPress={(e) => e.key === 'Enter' && addTodo()}
+          onKeyDown={(e) => e.key === 'Enter' && addTodo()}
           disabled={loadingTodos || addingTodo}
         />
-        <button onClick={addTodo} disabled={loadingTodos || addingTodo || !task.trim()}>
+        <button
+          onClick={addTodo}
+          disabled={loadingTodos || addingTodo || !task.trim()}
+        >
           {addingTodo ? 'Adding...' : 'Add'}
         </button>
       </div>
