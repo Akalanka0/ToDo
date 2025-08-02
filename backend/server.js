@@ -1,25 +1,29 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { connect } = require('./db');
+const { connect } = require('./db');         // Your db connection file
 const { ObjectId } = require('mongodb');
 
 const app = express();
 
-// Middleware
+// Middleware: CORS to allow frontend origin only
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   methods: ['GET', 'POST', 'PUT', 'DELETE']
 }));
+
+// Middleware: Parse JSON body with limit
 app.use(express.json({ limit: '10kb' }));
 
-// Request logging
+// Middleware: Simple request logging for debugging
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   next();
 });
 
-// Routes
+// --- API Routes ---
+
+// GET /api/todos - get all todos sorted by newest first
 app.get('/api/todos', async (req, res) => {
   try {
     const db = await connect();
@@ -34,6 +38,7 @@ app.get('/api/todos', async (req, res) => {
   }
 });
 
+// POST /api/todos - create a new todo
 app.post('/api/todos', async (req, res) => {
   try {
     if (!req.body.task?.trim()) {
@@ -60,6 +65,7 @@ app.post('/api/todos', async (req, res) => {
   }
 });
 
+// PUT /api/todos/:id - update a todo by ID
 app.put('/api/todos/:id', async (req, res) => {
   try {
     if (!ObjectId.isValid(req.params.id)) {
@@ -88,6 +94,7 @@ app.put('/api/todos/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/todos/:id - delete a todo by ID
 app.delete('/api/todos/:id', async (req, res) => {
   try {
     if (!ObjectId.isValid(req.params.id)) {
@@ -102,30 +109,35 @@ app.delete('/api/todos/:id', async (req, res) => {
     if (result.deletedCount === 0) {
       return res.status(404).json({ error: 'Todo not found' });
     }
-    res.status(204).end();
+    res.status(204).end(); // No content on success
   } catch (err) {
     console.error('DELETE /api/todos error:', err);
     res.status(500).json({ error: 'Failed to delete todo' });
   }
 });
 
-// Health check
+// Health check endpoints
 app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'ok',
-    database: 'connected', // Add this if you want to verify DB status
+    database: 'connected', // You can make this dynamic if you want
     timestamp: new Date().toISOString()
   });
 });
 
-// 404 Handler
+// Root route to show simple message instead of 404 JSON on "/"
+app.get('/', (req, res) => {
+  res.send('<h1>ToDo API Backend</h1><p>Use /api/todos endpoints for API.</p>');
+});
+
+// 404 handler - for any unmatched routes
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Error handler
+// Error handler middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err.stack);
   res.status(500).json({ 
@@ -136,7 +148,7 @@ app.use((err, req, res, next) => {
 
 // Start server
 async function start() {
-  await connect();
+  await connect(); // ensure DB connected first
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
@@ -144,6 +156,7 @@ async function start() {
   });
 }
 
+// Start and handle startup errors
 start().catch(err => {
   console.error('Fatal startup error:', err);
   process.exit(1);
