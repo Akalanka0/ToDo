@@ -1,4 +1,3 @@
-// src/App.jsx
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,12 +10,9 @@ function App() {
   const [addingTodo, setAddingTodo] = useState(false);
   const [error, setError] = useState(null);
 
-  // Use .env defined VITE_API_BASE_URL (for production/backend hosting)
-  const API_BASE_URL = import.meta.env.MODE === 'development'
-    ? 'http://localhost:3001/api/todos'
-    : import.meta.env.VITE_API_BASE_URL;
+  // Use relative API path for both dev and production
+  const API_BASE_URL = '/api/todos';
 
-  // Fetch todos on component mount
   useEffect(() => {
     const fetchTodos = async () => {
       try {
@@ -25,23 +21,19 @@ function App() {
         setTodos(response.data);
         setError(null);
       } catch (err) {
-        console.error('Fetch error:', err);
         setError('Failed to load todos. Please try again.');
       } finally {
         setLoadingTodos(false);
       }
     };
-
     fetchTodos();
-  }, [API_BASE_URL]);
+  }, []);
 
-  // Add new todo with optimistic update and temp ID
   const addTodo = async () => {
     if (!task.trim()) {
       setError('Task cannot be empty');
       return;
     }
-
     const tempId = uuidv4();
     const newTodo = {
       _id: tempId,
@@ -57,13 +49,10 @@ function App() {
       setError(null);
 
       const response = await axios.post(API_BASE_URL, { task: newTodo.task });
-
-      // Replace temp todo with real todo from server (with real _id)
       setTodos((prev) =>
         prev.map((todo) => (todo._id === tempId ? response.data : todo))
       );
     } catch (err) {
-      console.error('Add error:', err);
       setTodos((prev) => prev.filter((todo) => todo._id !== tempId));
       setError(err.response?.data?.error || 'Failed to add todo. Please try again.');
     } finally {
@@ -71,7 +60,6 @@ function App() {
     }
   };
 
-  // Toggle todo completion
   const toggleTodo = async (id) => {
     const todoToUpdate = todos.find((todo) => todo._id === id);
     if (!todoToUpdate) return;
@@ -82,12 +70,10 @@ function App() {
           todo._id === id ? { ...todo, completed: !todo.completed } : todo
         )
       );
-
       await axios.put(`${API_BASE_URL}/${id}`, {
         completed: !todoToUpdate.completed,
       });
     } catch (err) {
-      console.error('Toggle error:', err);
       setTodos((prev) =>
         prev.map((todo) => (todo._id === id ? todoToUpdate : todo))
       );
@@ -95,7 +81,6 @@ function App() {
     }
   };
 
-  // Delete todo
   const deleteTodo = async (id) => {
     const todoToDelete = todos.find((todo) => todo._id === id);
     if (!todoToDelete) return;
@@ -104,7 +89,6 @@ function App() {
       setTodos((prev) => prev.filter((todo) => todo._id !== id));
       await axios.delete(`${API_BASE_URL}/${id}`);
     } catch (err) {
-      console.error('Delete error:', err);
       setTodos((prev) => [...prev, todoToDelete]);
       setError('Failed to delete todo. Please try again.');
     }
@@ -126,13 +110,10 @@ function App() {
           value={task}
           onChange={(e) => setTask(e.target.value)}
           placeholder="Enter task..."
-          onKeyDown={(e) => e.key === 'Enter' && addTodo()}
+          onKeyPress={(e) => e.key === 'Enter' && addTodo()}
           disabled={loadingTodos || addingTodo}
         />
-        <button
-          onClick={addTodo}
-          disabled={loadingTodos || addingTodo || !task.trim()}
-        >
+        <button onClick={addTodo} disabled={loadingTodos || addingTodo || !task.trim()}>
           {addingTodo ? 'Adding...' : 'Add'}
         </button>
       </div>
