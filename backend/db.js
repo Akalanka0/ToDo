@@ -1,21 +1,17 @@
-require('dotenv').config();
 const { MongoClient } = require('mongodb');
+require('dotenv').config();
 
-// Load MongoDB URI from environment variable
 const uri = process.env.MONGODB_URI;
-
 if (!uri) {
-  console.error("❌ Environment variable MONGODB_URI is not defined.");
-  process.exit(1); // Fail early if missing
+  console.error("❌ MONGODB_URI not set.");
+  process.exit(1);
 }
 
-// Create a new MongoClient instance with options including TLS fix
 const client = new MongoClient(uri, {
   connectTimeoutMS: 5000,
   socketTimeoutMS: 30000,
   maxPoolSize: 10,
   minPoolSize: 2,
-  useUnifiedTopology: true,          // recommended for stable topology handling
   serverApi: {
     version: '1',
     strict: true,
@@ -25,42 +21,23 @@ const client = new MongoClient(uri, {
 
 let db;
 
-/**
- * Connects to MongoDB (if not connected yet)
- * @returns {Promise<Db>} MongoDB database instance
- */
 async function connect() {
   if (db) return db;
-
   try {
     await client.connect();
-    db = client.db(); // Uses database from URI if specified
-
-    // Confirm connection is alive
+    db = client.db(); // default from URI
     await db.command({ ping: 1 });
-    console.log('✅ MongoDB connected to:', db.databaseName);
-
-    // Optional: log collections for debugging
-    const collections = await db.listCollections().toArray();
-    console.log('📦 Collections:', collections.map(c => c.name));
-
+    console.log("✅ MongoDB connected:", db.databaseName);
     return db;
   } catch (err) {
-    console.error('❌ MongoDB connection error:', err.message);
-    process.exit(1); // Exit if connection fails
+    console.error("❌ MongoDB connection error:", err.message);
+    process.exit(1);
   }
 }
 
-// Graceful shutdown handlers
 process.on('SIGINT', async () => {
   await client.close();
-  console.log('👋 MongoDB connection closed (SIGINT)');
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  await client.close();
-  console.log('👋 MongoDB connection closed (SIGTERM)');
+  console.log("👋 MongoDB closed (SIGINT)");
   process.exit(0);
 });
 
