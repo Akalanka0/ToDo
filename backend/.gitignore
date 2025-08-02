@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 
 D:\Example\ToDo\backend\node_modules
+
+.env
+
+
